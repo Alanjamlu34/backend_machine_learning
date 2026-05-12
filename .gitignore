@@ -1,0 +1,13 @@
+PetImages/
+__pycache__/
+sentiment_data/
+venv/
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore Python cache files
+*.py[cod]
+
+# Ignore large model files
+*.h5
