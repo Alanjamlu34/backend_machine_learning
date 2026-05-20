@@ -12,7 +12,8 @@ import io
 import base64
 from flask import Flask, request, jsonify
 from tensorflow.keras.preprocessing.image import img_to_array, load_img
-
+from nltk.stem import PorterStemmer 
+stemmer = PorterStemmer()
 app = Flask(__name__)
 CORS(app)
 
@@ -48,11 +49,13 @@ def preprocess_image():
     
     # 3. Proses untuk Return Array (Rescale 1/255)
     img_array = img_to_array(img)
-    img_array = img_array / 255.0 
-    
+    img_array_norm = img_array / 255.0
+    # print("Preprocessed Image Array Shape: ", img_array.tolist())
+
     return jsonify({
+        'original_array': img_array.tolist(),         # Array asli sebelum normalisasi  
         'cropped_image_base64': img_str,           # Gambar untuk ditampilkan di frontend
-        'preprocessed_array': img_array.tolist()    # Array untuk dikirim ke endpoint predict
+        'preprocessed_array': img_array_norm.tolist()    # Array untuk dikirim ke endpoint predict
     })
 
 @app.route('/preprocess/nlp', methods=['POST'])
@@ -67,7 +70,8 @@ def preprocess_nlp():
     text = re.sub(r'@[A-Za-z0-9_]+', '', text)
     text = re.sub(r'#', '', text)
     text = re.sub(r'[^a-z\s]', '', text)
-    clean_text = ' '.join([word for word in text.split() if word not in stop_words])
+    words = [word for word in text.split() if word not in stop_words]
+    clean_text = ' '.join([stemmer.stem(word) for word in words])
 
     # Convert ke sequence & padding
     sequences = tokenizer.texts_to_sequences([clean_text])
@@ -86,15 +90,24 @@ def preprocess_nlp():
 @app.route('/predict/image', methods=['POST'])
 def predict_image():
     data = request.get_json()
-    # Menerima array hasil preprocessing
     img_array = np.array(data.get('preprocessed_array'))
-    img_array = np.expand_dims(img_array, axis=0) # Tambah batch dimension
+    img_array = np.expand_dims(img_array, axis=0)
     
     prediction = model_image.predict(img_array)
-    print("Prediction Image: ", prediction)
-    label = "Anjing" if prediction[0][0] > 0.5 else "Kucing"
+    raw_score = float(prediction[0][0]) # Ambil nilai mentah
     
-    return jsonify({'result': label, 'confidence': float(prediction[0][0])})
+    if raw_score > 0.5:
+        label = "Anjing"
+        confidence = raw_score
+    else:
+        label = "Kucing"
+        # Karena Kucing mendekati 0, maka tingkat keyakinannya adalah (1 - raw_score)
+        confidence = 1 - raw_score
+
+    return jsonify({
+        'result': label, 
+        'confidence': confidence
+    })
 
 @app.route('/predict/nlp', methods=['POST'])
 def predict_nlp():
